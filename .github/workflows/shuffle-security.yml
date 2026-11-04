@@ -1,4 +1,4 @@
-# Test and scan the dependency-only OpenTofu patch before publishing its binary.
+# Test and scan the OpenTofu dependency patch before publishing its binary.
 name: OpenTofu security package
 
 on:
@@ -29,8 +29,8 @@ jobs:
           cache: true
       - name: Verify the committed dependency graph
         run: go mod download && go mod verify
-      - name: Test provider installation, plugin RPC, and encryption
-        run: go test -mod=readonly -p=2 ./internal/providercache ./internal/getproviders ./internal/plugin/... ./internal/encryption/... ./version
+      - name: Test providers, plugin RPC, encryption, and tracing compatibility
+        run: go test -mod=readonly -p=2 ./internal/providercache ./internal/getproviders ./internal/plugin/... ./internal/encryption/... ./internal/tracing/... ./version
       - name: Build the native runtime package
         run: |
           mkdir -p dist
@@ -41,7 +41,7 @@ jobs:
           ./dist/tofu version -json | jq -e '.terraform_version == "1.12.11"'
           # Go derives the main module version from Git tags. A shallow clone
           # would misidentify this patched engine as vulnerable v0.0.0.
-          test "$(go version -m dist/tofu | awk '$1 == "mod" {print $3}')" = v1.12.11-shuffle.1
+          test "$(go version -m dist/tofu | awk '$1 == "mod" {print $3}')" = v1.12.11-shuffle.2
       - name: Scan the actual executable and verify analyzer coverage
         run: |
           curl -fsSL --retry 3 -o /tmp/trivy.tar.gz \
@@ -56,13 +56,13 @@ jobs:
           jq -e '[.Results[] | select(.Type == "gobinary") | .Packages[]] | length > 100' trivy.json
       - name: Package the verified binary
         run: |
-          tar -czf tofu_1.12.11-shuffle.1_linux_arm64.tar.gz -C dist tofu LICENSE
-          sha256sum tofu_1.12.11-shuffle.1_linux_arm64.tar.gz > SHA256SUMS
+          tar -czf tofu_1.12.11-shuffle.2_linux_arm64.tar.gz -C dist tofu LICENSE
+          sha256sum tofu_1.12.11-shuffle.2_linux_arm64.tar.gz > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: opentofu-linux-arm64
           path: |
-            tofu_1.12.11-shuffle.1_linux_arm64.tar.gz
+            tofu_1.12.11-shuffle.2_linux_arm64.tar.gz
             SHA256SUMS
             trivy.json
