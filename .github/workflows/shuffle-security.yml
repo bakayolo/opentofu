@@ -45,7 +45,10 @@ jobs:
           echo "2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d  /tmp/trivy.tar.gz" | sha256sum -c -
           tar -xzf /tmp/trivy.tar.gz -C /tmp trivy
           /tmp/trivy rootfs --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL \
-            --list-all-pkgs --format json --output trivy.json --exit-code 1 dist
+            --list-all-pkgs --format json --output trivy.json --exit-code 1 dist || {
+              jq '[.Results[].Vulnerabilities[]? | {VulnerabilityID, PkgName, InstalledVersion, FixedVersion}]' trivy.json
+              exit 1
+            }
           jq -e '[.Results[] | select(.Type == "gobinary") | .Packages[]] | length > 100' trivy.json
       - name: Package the verified binary
         run: |
