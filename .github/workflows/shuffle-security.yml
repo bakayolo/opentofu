@@ -22,6 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
         with:
           go-version: 1.27.3
@@ -38,6 +39,9 @@ jobs:
             -o dist/tofu ./cmd/tofu
           cp LICENSE dist/LICENSE
           ./dist/tofu version -json | jq -e '.terraform_version == "1.12.11"'
+          # Go derives the main module version from Git tags. A shallow clone
+          # would misidentify this patched engine as vulnerable v0.0.0.
+          test "$(go version -m dist/tofu | awk '$1 == "mod" {print $3}')" = v1.12.11-shuffle.1
       - name: Scan the actual executable and verify analyzer coverage
         run: |
           curl -fsSL --retry 3 -o /tmp/trivy.tar.gz \
@@ -55,6 +59,7 @@ jobs:
           tar -czf tofu_1.12.11-shuffle.1_linux_arm64.tar.gz -C dist tofu LICENSE
           sha256sum tofu_1.12.11-shuffle.1_linux_arm64.tar.gz > SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
         with:
           name: opentofu-linux-arm64
           path: |

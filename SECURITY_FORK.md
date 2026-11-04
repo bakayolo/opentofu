@@ -17,6 +17,12 @@ module verification, native ARM64 tests for provider installation/cache,
 plugin RPC and encryption, and executable-aware vulnerability scanning are
 required before publishing the package.
 
+Build from the exact `v1.12.11-shuffle.1` source tag with Git history available,
+and assert the Go build-info module version as well as the CLI version. A shallow
+checkout gives Go a `v0.0.0` pseudo-version, which incorrectly matches advisories
+already fixed in upstream v1.12.11. Keep accurate version metadata; do not add a
+scanner exception.
+
 Build artifacts include the binary, upstream MPL-2.0 license, archive checksum,
 and scanner report. Publish the tested artifact as release
 `v1.12.11-shuffle.1`, targeting the exact successful workflow commit. Do not
