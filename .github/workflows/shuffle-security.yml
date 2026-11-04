@@ -1,0 +1,60 @@
+# Test and scan the dependency-only OpenTofu patch before publishing its binary.
+name: OpenTofu security package
+
+on:
+  push:
+    branches: [bena/codex/opentofu-1.12-security]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  linux-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 45
+    env:
+      GOTOOLCHAIN: local
+      CGO_ENABLED: "0"
+      GOMAXPROCS: "2"
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: 1.27.3
+          cache: true
+      - name: Verify the committed dependency graph
+        run: go mod download && go mod verify
+      - name: Test provider installation, plugin RPC, and encryption
+        run: go test -mod=readonly -p=2 ./internal/providercache ./internal/getproviders ./internal/plugin/... ./internal/encryption/... ./version
+      - name: Build the native runtime package
+        run: |
+          mkdir -p dist
+          go build -mod=readonly -p=2 -trimpath \
+            -ldflags "-s -w -X github.com/opentofu/opentofu/version.dev=no" \
+            -o dist/tofu ./cmd/tofu
+          cp LICENSE dist/LICENSE
+          ./dist/tofu version -json | jq -e '.terraform_version == "1.12.11"'
+      - name: Scan the actual executable and verify analyzer coverage
+        run: |
+          curl -fsSL --retry 3 -o /tmp/trivy.tar.gz \
+            https://github.com/aquasecurity/trivy/releases/download/v0.70.0/trivy_0.70.0_Linux-ARM64.tar.gz
+          echo "2f6bb988b553a1bbac6bdd1ce890f5e412439564e17522b88a4541b4f364fc8d  /tmp/trivy.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/trivy.tar.gz -C /tmp trivy
+          /tmp/trivy rootfs --scanners vuln --ignore-unfixed --severity HIGH,CRITICAL \
+            --list-all-pkgs --format json --output trivy.json --exit-code 1 dist
+          jq -e '[.Results[] | select(.Type == "gobinary") | .Packages[]] | length > 100' trivy.json
+      - name: Package the verified binary
+        run: |
+          tar -czf tofu_1.12.11-shuffle.1_linux_arm64.tar.gz -C dist tofu LICENSE
+          sha256sum tofu_1.12.11-shuffle.1_linux_arm64.tar.gz > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: opentofu-linux-arm64
+          path: |
+            tofu_1.12.11-shuffle.1_linux_arm64.tar.gz
+            SHA256SUMS
+            trivy.json
